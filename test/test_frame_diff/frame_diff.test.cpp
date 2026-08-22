@@ -63,33 +63,48 @@ void test_ignores_padding_nibble_for_odd_width(void) {
   TEST_ASSERT_EQUAL_INT32(2, diff.right);
 }
 
-void test_plans_aligned_regional_refresh_rows(void) {
+void test_plans_aligned_regional_refresh_rectangle(void) {
   const Gray4FrameDiff diff = {true, 12, 10, 5, 20, 9};
-  const Gray4RefreshPlan plan = planGray4Refresh(diff, 100, 80);
+  const Gray4RefreshPlan plan = planGray4Refresh(diff, 100, 100, 80);
 
   TEST_ASSERT_EQUAL(GRAY4_REFRESH_REGIONAL, plan.kind);
+  TEST_ASSERT_EQUAL_INT32(8, plan.left);
   TEST_ASSERT_EQUAL_INT32(4, plan.top);
+  TEST_ASSERT_EQUAL_INT32(23, plan.right);
   TEST_ASSERT_EQUAL_INT32(11, plan.bottom);
+}
+
+void test_plans_tight_rectangle_for_observed_clock_change(void) {
+  const Gray4FrameDiff diff = {true, 281, 82, 556, 100, 577};
+  const Gray4RefreshPlan plan = planGray4Refresh(diff, 1872, 1404, 80);
+
+  TEST_ASSERT_EQUAL(GRAY4_REFRESH_REGIONAL, plan.kind);
+  TEST_ASSERT_EQUAL_INT32(80, plan.left);
+  TEST_ASSERT_EQUAL_INT32(556, plan.top);
+  TEST_ASSERT_EQUAL_INT32(103, plan.right);
+  TEST_ASSERT_EQUAL_INT32(579, plan.bottom);
 }
 
 void test_skips_unchanged_frames(void) {
   const Gray4FrameDiff diff = {true, 0, -1, -1, -1, -1};
 
-  TEST_ASSERT_EQUAL(GRAY4_REFRESH_SKIP, planGray4Refresh(diff, 100, 80).kind);
+  TEST_ASSERT_EQUAL(GRAY4_REFRESH_SKIP, planGray4Refresh(diff, 100, 100, 80).kind);
 }
 
 void test_falls_back_when_regional_band_is_too_tall(void) {
   const Gray4FrameDiff diff = {true, 12, 0, 0, 20, 79};
 
-  TEST_ASSERT_EQUAL(GRAY4_REFRESH_FULL, planGray4Refresh(diff, 100, 80).kind);
+  TEST_ASSERT_EQUAL(GRAY4_REFRESH_FULL, planGray4Refresh(diff, 100, 100, 80).kind);
 }
 
 void test_clips_aligned_region_to_last_row(void) {
   const Gray4FrameDiff diff = {true, 1, 0, 9, 0, 9};
-  const Gray4RefreshPlan plan = planGray4Refresh(diff, 10, 80);
+  const Gray4RefreshPlan plan = planGray4Refresh(diff, 10, 10, 80);
 
   TEST_ASSERT_EQUAL(GRAY4_REFRESH_REGIONAL, plan.kind);
+  TEST_ASSERT_EQUAL_INT32(0, plan.left);
   TEST_ASSERT_EQUAL_INT32(8, plan.top);
+  TEST_ASSERT_EQUAL_INT32(3, plan.right);
   TEST_ASSERT_EQUAL_INT32(9, plan.bottom);
 }
 
@@ -100,7 +115,8 @@ void process(void) {
   RUN_TEST(test_counts_nibbles_as_individual_pixels);
   RUN_TEST(test_reports_bounding_rectangle_across_rows);
   RUN_TEST(test_ignores_padding_nibble_for_odd_width);
-  RUN_TEST(test_plans_aligned_regional_refresh_rows);
+  RUN_TEST(test_plans_aligned_regional_refresh_rectangle);
+  RUN_TEST(test_plans_tight_rectangle_for_observed_clock_change);
   RUN_TEST(test_skips_unchanged_frames);
   RUN_TEST(test_falls_back_when_regional_band_is_too_tall);
   RUN_TEST(test_clips_aligned_region_to_last_row);

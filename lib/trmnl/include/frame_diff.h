@@ -20,7 +20,9 @@ enum Gray4RefreshKind : uint8_t {
 
 struct Gray4RefreshPlan {
   Gray4RefreshKind kind;
+  int32_t left;
   int32_t top;
+  int32_t right;
   int32_t bottom;
 };
 
@@ -28,5 +30,5 @@ Gray4FrameDiff compareGray4Frames(const uint8_t *previous, size_t previousSize,
                                   const uint8_t *current, size_t currentSize,
                                   uint16_t width, uint16_t height);
 
-Gray4RefreshPlan planGray4Refresh(const Gray4FrameDiff &diff, uint16_t height,
-                                  uint8_t maxHeightPercent);
+Gray4RefreshPlan planGray4Refresh(const Gray4FrameDiff &diff, uint16_t width,
+                                  uint16_t height, uint8_t maxHeightPercent);

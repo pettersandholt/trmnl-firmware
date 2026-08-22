@@ -51,19 +51,26 @@ Gray4FrameDiff compareGray4Frames(const uint8_t *previous, size_t previousSize,
   return diff;
 }
 
-Gray4RefreshPlan planGray4Refresh(const Gray4FrameDiff &diff, uint16_t height,
-                                  uint8_t maxHeightPercent) {
-  const Gray4RefreshPlan full = {GRAY4_REFRESH_FULL, 0,
-                                 height == 0 ? -1 : static_cast<int32_t>(height - 1)};
-  if (!diff.valid || height == 0 || maxHeightPercent == 0 || maxHeightPercent > 100) return full;
-  if (diff.changedPixels == 0) return {GRAY4_REFRESH_SKIP, -1, -1};
-  if (diff.top < 0 || diff.bottom < diff.top || diff.bottom >= height) return full;
+Gray4RefreshPlan planGray4Refresh(const Gray4FrameDiff &diff, uint16_t width,
+                                  uint16_t height, uint8_t maxHeightPercent) {
+  const Gray4RefreshPlan full = {
+      GRAY4_REFRESH_FULL, 0, 0,
+      width == 0 ? -1 : static_cast<int32_t>(width - 1),
+      height == 0 ? -1 : static_cast<int32_t>(height - 1)};
+  if (!diff.valid || width == 0 || height == 0 || maxHeightPercent == 0 ||
+      maxHeightPercent > 100) return full;
+  if (diff.changedPixels == 0) return {GRAY4_REFRESH_SKIP, -1, -1, -1, -1};
+  if (diff.left < 0 || diff.right < diff.left || diff.right >= width ||
+      diff.top < 0 || diff.bottom < diff.top || diff.bottom >= height) return full;
 
+  const int32_t left = diff.left & ~3;
+  int32_t right = diff.right | 3;
+  if (right >= width) right = width - 1;
   const int32_t top = diff.top & ~3;
   int32_t bottom = diff.bottom | 3;
   if (bottom >= height) bottom = height - 1;
   const uint32_t rows = static_cast<uint32_t>(bottom - top + 1);
   if (rows * 100 >= static_cast<uint32_t>(height) * maxHeightPercent) return full;
 
-  return {GRAY4_REFRESH_REGIONAL, top, bottom};
+  return {GRAY4_REFRESH_REGIONAL, left, top, right, bottom};
 }

@@ -1980,7 +1980,7 @@ void display_show_image(uint8_t *image_buffer, int data_size, bool bWait, bool b
         // real content refresh (bWait=true) immediately follows.
 #ifdef BOARD_TRMNL_X
         const Gray4RefreshPlan refresh_plan = planGray4Refresh(
-            gray4_diff, height, FASTEPD_REGIONAL_MAX_HEIGHT_PERCENT);
+            gray4_diff, width, height, FASTEPD_REGIONAL_MAX_HEIGHT_PERCENT);
         const bool force_full = apiDisplayResult.response.maximum_compatibility ||
                                 iTempProfile > 0 || bSkipClear ||
                                 iUpdateCount >= FASTEPD_REGIONAL_REFRESH_LIMIT;
@@ -1989,12 +1989,14 @@ void display_show_image(uint8_t *image_buffer, int data_size, bool bWait, bool b
         if (refresh_plan.kind == GRAY4_REFRESH_SKIP && !force_full) {
             Log_info("TRMNL X 4-bit refresh skipped: frame unchanged");
         } else if (refresh_plan.kind == GRAY4_REFRESH_REGIONAL && !force_full) {
-            // ponytail: use full-width bands until FastEPD's alternating DMA buffers mask columns safely.
-            BB_RECT rect = {0, refresh_plan.top, width,
+            BB_RECT rect = {refresh_plan.left, refresh_plan.top,
+                            refresh_plan.right - refresh_plan.left + 1,
                             refresh_plan.bottom - refresh_plan.top + 1};
-            Log_error("TRMNL X regional 4-bit refresh: rows=%" PRId32 "-%" PRId32
+            Log_error("TRMNL X regional 4-bit refresh: rect=%" PRId32 ",%" PRId32
+                      "-%" PRId32 ",%" PRId32
                       ", changed=%" PRIu32 ", count=%d/%d",
-                      refresh_plan.top, refresh_plan.bottom, gray4_diff.changedPixels,
+                      refresh_plan.left, refresh_plan.top, refresh_plan.right,
+                      refresh_plan.bottom, gray4_diff.changedPixels,
                       iUpdateCount + 1, FASTEPD_REGIONAL_REFRESH_LIMIT);
             if (bbep.fullUpdate(CLEAR_FAST, false, &rect) == BBEP_SUCCESS) {
                 iUpdateCount++;
