@@ -1487,6 +1487,39 @@ void load_prev_image(void)
   }
 } /* load_prev_image() */
 
+#ifdef BOARD_TRMNL_X
+static uint8_t *load_prev_gray4_frame(size_t *frame_size)
+{
+  *frame_size = 0;
+  if (!DisplayedImage::exists()) return nullptr;
+
+  int png_size = 0;
+  uint8_t *png = display_read_file(DisplayedImage::get(), &png_size);
+  if (!png) {
+    Log_info("TRMNL X frame diff: previous image %s is unavailable", DisplayedImage::get());
+    return nullptr;
+  }
+
+  const size_t required = ((static_cast<size_t>(display_width()) + 1) / 2) * display_height();
+  uint8_t *frame = static_cast<uint8_t *>(ps_malloc(required));
+  if (!frame) {
+    Log_info("TRMNL X frame diff: unable to allocate %zu-byte previous frame", required);
+    free(png);
+    return nullptr;
+  }
+
+  if (!display_decode_gray4(png, png_size, frame, required)) {
+    Log_info("TRMNL X frame diff: previous image is not a native 4-bit grayscale frame");
+    free(frame);
+    frame = nullptr;
+  } else {
+    *frame_size = required;
+  }
+  free(png);
+  return frame;
+}
+#endif
+
 /**
  * @brief Function to ping server and download and show the image if all is OK
  * @param url Server URL address
@@ -1604,6 +1637,8 @@ static https_request_err_e downloadAndShow()
     char szTemp[36];
     filesystem_fix_filename(apiDisplayResult.response.filename.c_str(), szTemp);
     Log_info("Modem: saving to %s", szTemp);
+    size_t previousFrameSize = 0;
+    uint8_t *previousFrame = load_prev_gray4_frame(&previousFrameSize);
     filesystem_purge_old_file(szTemp);
 
     String _prevPath = preferences.getString(PREFERENCES_CURRENT_PATH_KEY, "");
@@ -1619,6 +1654,7 @@ static https_request_err_e downloadAndShow()
     auto httpRes = g_modem->httpGet(String(filename), szTemp, 0, imgHeaders);
     if (!httpRes.ok)
     {
+      free(previousFrame);
       Log_error_submit("Modem httpGet failed: %u bytes received", httpRes.bytesReceived);
       return HTTPS_REQUEST_FAILED;
     }
@@ -1627,12 +1663,14 @@ static https_request_err_e downloadAndShow()
     uint8_t* buf = display_read_file(szTemp, &fileSize);
     if (!buf || fileSize == 0)
     {
+      free(previousFrame);
       filesystem_file_delete(szTemp);
       Log_error_submit("Modem: failed to read downloaded image from %s", szTemp);
       return HTTPS_WRONG_IMAGE_SIZE;
     }
 
-    display_show_image(buf, fileSize, true);
+    display_show_image(buf, fileSize, true, false, previousFrame, previousFrameSize);
+    free(previousFrame);
     free(buf);
     DisplayedImage::remember(szTemp); // current image becomes the previous image
 
@@ -1858,10 +1896,19 @@ static https_request_err_e downloadAndShow()
             char szTemp[36];
             filesystem_fix_filename(apiDisplayResult.response.filename.c_str(), szTemp);
             Log.info("%s [%d]: Writing %s to SPIFFS\r\n", __FILE__, __LINE__, szTemp);
+#ifdef BOARD_TRMNL_X
+            size_t previousFrameSize = 0;
+            uint8_t *previousFrame = isPNG ? load_prev_gray4_frame(&previousFrameSize) : nullptr;
+#endif
             filesystem_purge_old_file(szTemp); // try to delete the old version or older than 24h
             writeImageToFile(szTemp, buffer, content_size);
             Log.info("%s [%d]: Decoding %s\r\n", __FILE__, __LINE__, (isPNG) ? "png" : "jpeg");
+#ifdef BOARD_TRMNL_X
+            display_show_image(buffer, content_size, true, false, previousFrame, previousFrameSize);
+            free(previousFrame);
+#else
             display_show_image(buffer, content_size, true);
+#endif
             DisplayedImage::remember(szTemp); // current image becomes the previous image
             if (buffer_malloc) {
               Log.info("%s [%d]: Freeing the image buffer we allocated\r\n", __FILE__, __LINE__);

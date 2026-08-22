@@ -135,7 +135,12 @@ void Paint_DrawMultilineText(UWORD x_start, UWORD y_start, const char *message, 
  * @return none
  */
 
-void display_show_image(uint8_t *image_buffer, int data_size, bool bWait, bool bSkipClear = false);
+void display_show_image(uint8_t *image_buffer, int data_size, bool bWait, bool bSkipClear = false,
+                        const uint8_t *previous_frame = nullptr, size_t previous_frame_size = 0);
+
+#ifdef BOARD_TRMNL_X
+bool display_decode_gray4(const uint8_t *png_data, int data_size, uint8_t *output, size_t output_size);
+#endif
 
 /**
  * @brief Function to read an image from the file system

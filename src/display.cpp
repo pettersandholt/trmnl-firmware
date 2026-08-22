@@ -6,6 +6,7 @@
 #include <Preferences.h>
 #include <preferences_persistence.h>
 #include <refresh_interval.h>
+#include <frame_diff.h>
 #include "DEV_Config.h"
 #ifdef BOARD_SEEED_RETERMINAL_E1002
 #include "displays/spectra6.h"
@@ -1414,6 +1415,62 @@ int png_draw(PNGDRAW *pDraw)
     }
     return 1;
 } /* png_draw() */
+
+#ifdef BOARD_TRMNL_X
+static int png_draw_gray4_frame(PNGDRAW *pDraw)
+{
+    if (!pDraw->pUser || pDraw->iPixelType != PNG_PIXEL_GRAYSCALE || pDraw->iBpp != 4) return 0;
+
+    const size_t row_bytes = (static_cast<size_t>(pDraw->iWidth) + 1) / 2;
+    uint8_t *output = static_cast<uint8_t *>(pDraw->pUser);
+    memcpy(output + static_cast<size_t>(pDraw->y) * row_bytes, pDraw->pPixels, row_bytes);
+    return 1;
+}
+
+bool display_decode_gray4(const uint8_t *png_data, int data_size, uint8_t *output, size_t output_size)
+{
+    if (!png_data || data_size <= 0 || !output) return false;
+
+    PNG png;
+    int rc = png.openRAM(const_cast<uint8_t *>(png_data), data_size, png_draw_gray4_frame);
+    if (rc != PNG_SUCCESS) {
+        png.close();
+        return false;
+    }
+
+    const size_t expected_size = ((static_cast<size_t>(display_width()) + 1) / 2) * display_height();
+    const bool supported = png.getWidth() == display_width() && png.getHeight() == display_height() &&
+                           png.getBpp() == 4 && png.getPixelType() == PNG_PIXEL_GRAYSCALE &&
+                           output_size >= expected_size;
+    if (supported) rc = png.decode(output, 0);
+    png.close();
+    return supported && rc == PNG_SUCCESS;
+}
+
+static void log_gray4_frame_diff(const uint8_t *previous_frame, size_t previous_frame_size)
+{
+    const uint16_t width = display_width();
+    const uint16_t height = display_height();
+    const size_t frame_size = ((static_cast<size_t>(width) + 1) / 2) * height;
+    const Gray4FrameDiff diff = compareGray4Frames(previous_frame, previous_frame_size,
+                                                   bbep.currentBuffer(), frame_size, width, height);
+    if (!diff.valid) {
+        Log_info("TRMNL X frame diff unavailable: invalid frame buffer");
+        return;
+    }
+    if (diff.changedPixels == 0) {
+        Log_info("TRMNL X frame diff: unchanged; refresh remains full (observation only)");
+        return;
+    }
+
+    const uint32_t bounding_pixels = static_cast<uint32_t>(diff.right - diff.left + 1) *
+                                     static_cast<uint32_t>(diff.bottom - diff.top + 1);
+    Log_info("TRMNL X frame diff: changed=%" PRIu32 ", bbox=%" PRId32 ",%" PRId32 "-%" PRId32 ",%" PRId32
+             ", bbox_pixels=%" PRIu32 "/%" PRIu32 "; refresh remains full (observation only)",
+             diff.changedPixels, diff.left, diff.top, diff.right, diff.bottom,
+             bounding_pixels, static_cast<uint32_t>(width) * height);
+}
+#endif
 #endif
 //
 // A table to accelerate the testing of 2-bit images for the number
@@ -1722,7 +1779,8 @@ PNG *png = new PNG();
  * @param reverse shows if the color scheme is reverse
  * @return none
  */
-void display_show_image(uint8_t *image_buffer, int data_size, bool bWait, bool bSkipClear)
+void display_show_image(uint8_t *image_buffer, int data_size, bool bWait, bool bSkipClear,
+                        const uint8_t *previous_frame, size_t previous_frame_size)
 
 {
     bool isPNG = data_size >= 4 && MOTOLONG(image_buffer) == (int32_t)0x89504e47;
@@ -1835,6 +1893,11 @@ void display_show_image(uint8_t *image_buffer, int data_size, bool bWait, bool b
 #endif // BB_EPAPER
         iUpdateCount = 1; // use partial update
     }
+#if defined(BOARD_TRMNL_X) && !defined(BB_EPAPER)
+    if (previous_frame && isPNG && bbep.getMode() == BB_MODE_4BPP) {
+        log_gray4_frame_diff(previous_frame, previous_frame_size);
+    }
+#endif
     Log_info("Display refresh start");
     if (iTempProfile != apiDisplayResult.response.temp_profile) {
         iTempProfile = apiDisplayResult.response.temp_profile;
