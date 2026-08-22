@@ -1491,25 +1491,28 @@ void load_prev_image(void)
 static uint8_t *load_prev_gray4_frame(size_t *frame_size)
 {
   *frame_size = 0;
-  if (!DisplayedImage::exists()) return nullptr;
+  if (!DisplayedImage::exists()) {
+    Log_error("TRMNL X frame diff: no retained previous image (wake reason %d)", (int)wakeup_reason);
+    return nullptr;
+  }
 
   int png_size = 0;
   uint8_t *png = display_read_file(DisplayedImage::get(), &png_size);
   if (!png) {
-    Log_info("TRMNL X frame diff: previous image %s is unavailable", DisplayedImage::get());
+    Log_error("TRMNL X frame diff: previous image %s is unavailable", DisplayedImage::get());
     return nullptr;
   }
 
   const size_t required = ((static_cast<size_t>(display_width()) + 1) / 2) * display_height();
   uint8_t *frame = static_cast<uint8_t *>(ps_malloc(required));
   if (!frame) {
-    Log_info("TRMNL X frame diff: unable to allocate %zu-byte previous frame", required);
+    Log_error("TRMNL X frame diff: unable to allocate %zu-byte previous frame", required);
     free(png);
     return nullptr;
   }
 
   if (!display_decode_gray4(png, png_size, frame, required)) {
-    Log_info("TRMNL X frame diff: previous image is not a native 4-bit grayscale frame");
+    Log_error("TRMNL X frame diff: previous image is not a native 4-bit grayscale frame");
     free(frame);
     frame = nullptr;
   } else {
