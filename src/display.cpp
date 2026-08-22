@@ -1449,23 +1449,24 @@ bool display_decode_gray4(const uint8_t *png_data, int data_size, uint8_t *outpu
 
 static void log_gray4_frame_diff(const uint8_t *previous_frame, size_t previous_frame_size)
 {
+    // ponytail: error level is the existing remote-log threshold; return to Log_info after field capture.
     const uint16_t width = display_width();
     const uint16_t height = display_height();
     const size_t frame_size = ((static_cast<size_t>(width) + 1) / 2) * height;
     const Gray4FrameDiff diff = compareGray4Frames(previous_frame, previous_frame_size,
                                                    bbep.currentBuffer(), frame_size, width, height);
     if (!diff.valid) {
-        Log_info("TRMNL X frame diff unavailable: invalid frame buffer");
+        Log_error("TRMNL X frame diff unavailable: invalid frame buffer");
         return;
     }
     if (diff.changedPixels == 0) {
-        Log_info("TRMNL X frame diff: unchanged; refresh remains full (observation only)");
+        Log_error("TRMNL X frame diff: unchanged; refresh remains full (observation only)");
         return;
     }
 
     const uint32_t bounding_pixels = static_cast<uint32_t>(diff.right - diff.left + 1) *
                                      static_cast<uint32_t>(diff.bottom - diff.top + 1);
-    Log_info("TRMNL X frame diff: changed=%" PRIu32 ", bbox=%" PRId32 ",%" PRId32 "-%" PRId32 ",%" PRId32
+    Log_error("TRMNL X frame diff: changed=%" PRIu32 ", bbox=%" PRId32 ",%" PRId32 "-%" PRId32 ",%" PRId32
              ", bbox_pixels=%" PRIu32 "/%" PRIu32 "; refresh remains full (observation only)",
              diff.changedPixels, diff.left, diff.top, diff.right, diff.bottom,
              bounding_pixels, static_cast<uint32_t>(width) * height);
