@@ -72,6 +72,8 @@ uint8_t u8SpectraPal[512]; // RGB333 mapped to closest Spectra6 color
 #define FS LittleFS
 // Image size comparison for determining photos vs 'chart graphics'
 #define FASTEPD_LARGE_IMAGE_THRESHOLD (100 * 1024)
+#define FASTEPD_REGIONAL_MAX_HEIGHT_PERCENT 80
+#define FASTEPD_REGIONAL_REFRESH_LIMIT 7
 #include "FastEPD.h"
 FASTEPD bbep;
 // 9-step table for fast grays
@@ -1447,7 +1449,7 @@ bool display_decode_gray4(const uint8_t *png_data, int data_size, uint8_t *outpu
     return supported && rc == PNG_SUCCESS;
 }
 
-static void log_gray4_frame_diff(const uint8_t *previous_frame, size_t previous_frame_size)
+static Gray4FrameDiff analyze_gray4_frame_diff(const uint8_t *previous_frame, size_t previous_frame_size)
 {
     // ponytail: error level is the existing remote-log threshold; return to Log_info after field capture.
     const uint16_t width = display_width();
@@ -1457,19 +1459,20 @@ static void log_gray4_frame_diff(const uint8_t *previous_frame, size_t previous_
                                                    bbep.currentBuffer(), frame_size, width, height);
     if (!diff.valid) {
         Log_error("TRMNL X frame diff unavailable: invalid frame buffer");
-        return;
+        return diff;
     }
     if (diff.changedPixels == 0) {
-        Log_error("TRMNL X frame diff: unchanged; refresh remains full (observation only)");
-        return;
+        Log_error("TRMNL X frame diff: unchanged");
+        return diff;
     }
 
     const uint32_t bounding_pixels = static_cast<uint32_t>(diff.right - diff.left + 1) *
                                      static_cast<uint32_t>(diff.bottom - diff.top + 1);
     Log_error("TRMNL X frame diff: changed=%" PRIu32 ", bbox=%" PRId32 ",%" PRId32 "-%" PRId32 ",%" PRId32
-             ", bbox_pixels=%" PRIu32 "/%" PRIu32 "; refresh remains full (observation only)",
+             ", bbox_pixels=%" PRIu32 "/%" PRIu32,
              diff.changedPixels, diff.left, diff.top, diff.right, diff.bottom,
              bounding_pixels, static_cast<uint32_t>(width) * height);
+    return diff;
 }
 #endif
 #endif
@@ -1789,6 +1792,9 @@ void display_show_image(uint8_t *image_buffer, int data_size, bool bWait, bool b
     auto height = display_height();
 //    uint32_t *d32;
     bool bAlloc = false;
+#if defined(BOARD_TRMNL_X) && !defined(BB_EPAPER)
+    Gray4FrameDiff gray4_diff = {false, 0, -1, -1, -1, -1};
+#endif
     static int i426Workaround = 0;
 #ifdef BB_EPAPER
     int iRefreshMode = REFRESH_FULL; // assume full (slow) refresh
@@ -1892,11 +1898,13 @@ void display_show_image(uint8_t *image_buffer, int data_size, bool bWait, bool b
 #endif // !BOARD_SEEED_RETERMINAL_E1002
         iRefreshMode = REFRESH_PARTIAL;
 #endif // BB_EPAPER
+#if !defined(BOARD_TRMNL_X) || defined(BB_EPAPER)
         iUpdateCount = 1; // use partial update
+#endif
     }
 #if defined(BOARD_TRMNL_X) && !defined(BB_EPAPER)
     if (previous_frame && isPNG && bbep.getMode() == BB_MODE_4BPP) {
-        log_gray4_frame_diff(previous_frame, previous_frame_size);
+        gray4_diff = analyze_gray4_frame_diff(previous_frame, previous_frame_size);
     }
 #endif
     Log_info("Display refresh start");
@@ -1966,14 +1974,54 @@ void display_show_image(uint8_t *image_buffer, int data_size, bool bWait, bool b
         // bWait=false means loading screen: skip clearing passes so it appears
         // faster. Ghosting from the previous image is acceptable since the
         // real content refresh (bWait=true) immediately follows.
+#ifdef BOARD_TRMNL_X
+        const Gray4RefreshPlan refresh_plan = planGray4Refresh(
+            gray4_diff, height, FASTEPD_REGIONAL_MAX_HEIGHT_PERCENT);
+        const bool force_full = apiDisplayResult.response.maximum_compatibility ||
+                                iTempProfile > 0 || bSkipClear ||
+                                iUpdateCount >= FASTEPD_REGIONAL_REFRESH_LIMIT;
+        bool refreshed = false;
+
+        if (refresh_plan.kind == GRAY4_REFRESH_SKIP && !force_full) {
+            Log_info("TRMNL X 4-bit refresh skipped: frame unchanged");
+        } else if (refresh_plan.kind == GRAY4_REFRESH_REGIONAL && !force_full) {
+            // ponytail: use full-width bands until FastEPD's alternating DMA buffers mask columns safely.
+            BB_RECT rect = {0, refresh_plan.top, width,
+                            refresh_plan.bottom - refresh_plan.top + 1};
+            Log_error("TRMNL X regional 4-bit refresh: rows=%" PRId32 "-%" PRId32
+                      ", changed=%" PRIu32 ", count=%d/%d",
+                      refresh_plan.top, refresh_plan.bottom, gray4_diff.changedPixels,
+                      iUpdateCount + 1, FASTEPD_REGIONAL_REFRESH_LIMIT);
+            if (bbep.fullUpdate(CLEAR_FAST, false, &rect) == BBEP_SUCCESS) {
+                iUpdateCount++;
+                refreshed = true;
+            } else {
+                Log_error("TRMNL X regional 4-bit refresh failed; falling back to full refresh");
+            }
+        }
+
+        if (!refreshed && (refresh_plan.kind != GRAY4_REFRESH_SKIP || force_full)) {
+            const int iClearMode = bSkipClear ? CLEAR_NONE
+                                             : (iUpdateCount >= FASTEPD_REGIONAL_REFRESH_LIMIT ||
+                                                iUpdateCount == 0 || iTempProfile > 0)
+                                                   ? CLEAR_SLOW
+                                                   : CLEAR_FAST;
+            Log_info("fullUpdate clear mode = %d\n", iClearMode);
+            bbep.fullUpdate(iClearMode, false);
+            iUpdateCount = 0;
+        }
+#else
         int iClearMode = bSkipClear ? CLEAR_NONE
                                    : ((iUpdateCount & 7) == 0 || (iTempProfile > 0)) ? CLEAR_SLOW : CLEAR_FAST;
         Log_info("fullUpdate clear mode = %d\n", iClearMode);
         bbep.fullUpdate(iClearMode, false);
+#endif
  //   }
  }
 #endif
+#if !defined(BOARD_TRMNL_X) || defined(BB_EPAPER)
     iUpdateCount++;
+#endif
     Log_info("display_show_image end");
 }
 /**
