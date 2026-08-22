@@ -1433,19 +1433,23 @@ bool display_decode_gray4(const uint8_t *png_data, int data_size, uint8_t *outpu
 {
     if (!png_data || data_size <= 0 || !output) return false;
 
-    PNG png;
-    int rc = png.openRAM(const_cast<uint8_t *>(png_data), data_size, png_draw_gray4_frame);
+    PNG *png = new PNG();
+    if (!png) return false;
+
+    int rc = png->openRAM(const_cast<uint8_t *>(png_data), data_size, png_draw_gray4_frame);
     if (rc != PNG_SUCCESS) {
-        png.close();
+        png->close();
+        delete png;
         return false;
     }
 
     const size_t expected_size = ((static_cast<size_t>(display_width()) + 1) / 2) * display_height();
-    const bool supported = png.getWidth() == display_width() && png.getHeight() == display_height() &&
-                           png.getBpp() == 4 && png.getPixelType() == PNG_PIXEL_GRAYSCALE &&
+    const bool supported = png->getWidth() == display_width() && png->getHeight() == display_height() &&
+                           png->getBpp() == 4 && png->getPixelType() == PNG_PIXEL_GRAYSCALE &&
                            output_size >= expected_size;
-    if (supported) rc = png.decode(output, 0);
-    png.close();
+    if (supported) rc = png->decode(output, 0);
+    png->close();
+    delete png;
     return supported && rc == PNG_SUCCESS;
 }
 
