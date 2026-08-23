@@ -53,8 +53,10 @@ static void recordRegionPixel(Gray4FrameDiff &diff, int32_t x, int32_t y) {
     return;
   }
 
-  // ponytail: four proximity-clustered regions cover dashboard updates; fall back to full refresh beyond that.
-  if (diff.regionCount >= GRAY4_MAX_REFRESH_REGIONS) {
+  // A raster scan can temporarily split one final area into several clusters
+  // before later rows connect them. Keep those provisional clusters long
+  // enough to merge before enforcing the four-region hardware limit.
+  if (diff.regionCount >= GRAY4_MAX_TRACKED_REGIONS) {
     diff.regionOverflow = true;
     return;
   }
@@ -104,6 +106,10 @@ Gray4FrameDiff compareGray4Frames(const uint8_t *previous, size_t previousSize,
         recordChangedPixel(diff, x + 1, y);
       }
     }
+  }
+  if (diff.regionOverflow || diff.regionCount > GRAY4_MAX_REFRESH_REGIONS) {
+    diff.regionOverflow = true;
+    diff.regionCount = GRAY4_MAX_REFRESH_REGIONS;
   }
   return diff;
 }

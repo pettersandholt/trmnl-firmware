@@ -180,6 +180,26 @@ void test_merges_nearby_changes_into_one_region(void) {
   TEST_ASSERT_EQUAL_INT32(17, diff.regions[0].right);
 }
 
+void test_defers_region_overflow_until_provisional_clusters_merge(void) {
+  const uint16_t width = 220;
+  uint8_t previous[2200] = {};
+  uint8_t current[2200] = {};
+  const uint16_t provisionalX[] = {0, 30, 60, 90, 120, 150, 180};
+  const uint16_t bridgeX[] = {0, 12, 24, 36, 48, 60, 72, 84, 90};
+  for (uint16_t x : provisionalX) setGray4Pixel(current, width, x, 0, 0x0F);
+  for (uint16_t x : bridgeX) setGray4Pixel(current, width, x, 1, 0x0F);
+
+  const Gray4FrameDiff diff = compareGray4Frames(previous, sizeof(previous), current,
+                                                 sizeof(current), width, 20);
+  const Gray4RefreshPlan plan = planGray4Refresh(diff, width, 20, 80);
+
+  TEST_ASSERT_EQUAL_UINT8(GRAY4_MAX_REFRESH_REGIONS, diff.regionCount);
+  TEST_ASSERT_FALSE(diff.regionOverflow);
+  TEST_ASSERT_EQUAL(GRAY4_REFRESH_REGIONAL, plan.kind);
+  TEST_ASSERT_EQUAL_INT32(0, plan.regions[0].left);
+  TEST_ASSERT_EQUAL_INT32(91, plan.regions[0].right);
+}
+
 void test_falls_back_after_more_than_four_regions(void) {
   const uint16_t width = 160;
   uint8_t previous[1600] = {};
@@ -209,6 +229,7 @@ void process(void) {
   RUN_TEST(test_clips_aligned_region_to_last_row);
   RUN_TEST(test_plans_two_distant_dashboard_changes_as_separate_regions);
   RUN_TEST(test_merges_nearby_changes_into_one_region);
+  RUN_TEST(test_defers_region_overflow_until_provisional_clusters_merge);
   RUN_TEST(test_falls_back_after_more_than_four_regions);
   UNITY_END();
 }

@@ -4,6 +4,7 @@
 #include <stdint.h>
 
 #define GRAY4_MAX_REFRESH_REGIONS 4
+#define GRAY4_MAX_TRACKED_REGIONS 16
 
 struct Gray4Region {
   int32_t left;
@@ -21,7 +22,7 @@ struct Gray4FrameDiff {
   int32_t bottom;
   uint8_t regionCount;
   bool regionOverflow;
-  Gray4Region regions[GRAY4_MAX_REFRESH_REGIONS];
+  Gray4Region regions[GRAY4_MAX_TRACKED_REGIONS];
 };
 
 enum Gray4RefreshKind : uint8_t {
