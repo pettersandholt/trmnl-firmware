@@ -1473,9 +1473,10 @@ static Gray4FrameDiff analyze_gray4_frame_diff(const uint8_t *previous_frame, si
     const uint32_t bounding_pixels = static_cast<uint32_t>(diff.right - diff.left + 1) *
                                      static_cast<uint32_t>(diff.bottom - diff.top + 1);
     Log_error("TRMNL X frame diff: changed=%" PRIu32 ", bbox=%" PRId32 ",%" PRId32 "-%" PRId32 ",%" PRId32
-             ", bbox_pixels=%" PRIu32 "/%" PRIu32,
+             ", bbox_pixels=%" PRIu32 "/%" PRIu32 ", regions=%u%s",
              diff.changedPixels, diff.left, diff.top, diff.right, diff.bottom,
-             bounding_pixels, static_cast<uint32_t>(width) * height);
+             bounding_pixels, static_cast<uint32_t>(width) * height,
+             static_cast<unsigned>(diff.regionCount), diff.regionOverflow ? "+" : "");
     return diff;
 }
 #endif
@@ -1797,7 +1798,7 @@ void display_show_image(uint8_t *image_buffer, int data_size, bool bWait, bool b
 //    uint32_t *d32;
     bool bAlloc = false;
 #if defined(BOARD_TRMNL_X) && !defined(BB_EPAPER)
-    Gray4FrameDiff gray4_diff = {false, 0, -1, -1, -1, -1};
+    Gray4FrameDiff gray4_diff = {};
 #endif
     static int i426Workaround = 0;
 #ifdef BB_EPAPER
@@ -1989,16 +1990,23 @@ void display_show_image(uint8_t *image_buffer, int data_size, bool bWait, bool b
         if (refresh_plan.kind == GRAY4_REFRESH_SKIP && !force_full) {
             Log_info("TRMNL X 4-bit refresh skipped: frame unchanged");
         } else if (refresh_plan.kind == GRAY4_REFRESH_REGIONAL && !force_full) {
-            BB_RECT rect = {refresh_plan.left, refresh_plan.top,
-                            refresh_plan.right - refresh_plan.left + 1,
-                            refresh_plan.bottom - refresh_plan.top + 1};
-            Log_error("TRMNL X regional 4-bit refresh: rect=%" PRId32 ",%" PRId32
-                      "-%" PRId32 ",%" PRId32
-                      ", changed=%" PRIu32 ", count=%d/%d",
-                      refresh_plan.left, refresh_plan.top, refresh_plan.right,
-                      refresh_plan.bottom, gray4_diff.changedPixels,
+            BB_RECT rects[GRAY4_MAX_REFRESH_REGIONS];
+            Log_error("TRMNL X regional 4-bit refresh: regions=%u, changed=%" PRIu32
+                      ", count=%d/%d",
+                      static_cast<unsigned>(refresh_plan.regionCount), gray4_diff.changedPixels,
                       iUpdateCount + 1, FASTEPD_REGIONAL_REFRESH_LIMIT);
-            if (bbep.fullUpdate(CLEAR_FAST, false, &rect) == BBEP_SUCCESS) {
+            for (uint8_t i = 0; i < refresh_plan.regionCount; i++) {
+                const Gray4Region &region = refresh_plan.regions[i];
+                rects[i] = {region.left, region.top,
+                            region.right - region.left + 1,
+                            region.bottom - region.top + 1};
+                Log_error("TRMNL X regional 4-bit refresh: region[%u]=%" PRId32 ",%" PRId32
+                          "-%" PRId32 ",%" PRId32,
+                          static_cast<unsigned>(i), region.left, region.top,
+                          region.right, region.bottom);
+            }
+            if (bbep.fullUpdateRegions(CLEAR_FAST, false, rects,
+                                       refresh_plan.regionCount) == BBEP_SUCCESS) {
                 iUpdateCount++;
                 refreshed = true;
             } else {

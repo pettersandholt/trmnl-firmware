@@ -3,6 +3,15 @@
 #include <stddef.h>
 #include <stdint.h>
 
+#define GRAY4_MAX_REFRESH_REGIONS 4
+
+struct Gray4Region {
+  int32_t left;
+  int32_t top;
+  int32_t right;
+  int32_t bottom;
+};
+
 struct Gray4FrameDiff {
   bool valid;
   uint32_t changedPixels;
@@ -10,6 +19,9 @@ struct Gray4FrameDiff {
   int32_t top;
   int32_t right;
   int32_t bottom;
+  uint8_t regionCount;
+  bool regionOverflow;
+  Gray4Region regions[GRAY4_MAX_REFRESH_REGIONS];
 };
 
 enum Gray4RefreshKind : uint8_t {
@@ -20,10 +32,8 @@ enum Gray4RefreshKind : uint8_t {
 
 struct Gray4RefreshPlan {
   Gray4RefreshKind kind;
-  int32_t left;
-  int32_t top;
-  int32_t right;
-  int32_t bottom;
+  uint8_t regionCount;
+  Gray4Region regions[GRAY4_MAX_REFRESH_REGIONS];
 };
 
 Gray4FrameDiff compareGray4Frames(const uint8_t *previous, size_t previousSize,
