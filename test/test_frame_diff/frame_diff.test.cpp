@@ -90,6 +90,52 @@ void test_ignores_padding_nibble_for_odd_width(void) {
   TEST_ASSERT_EQUAL_INT32(2, diff.right);
 }
 
+void test_skips_equal_rows_without_losing_sparse_changes_or_counting_padding(void) {
+  const uint16_t width = 39;
+  uint8_t previous[400] = {};
+  uint8_t current[400] = {};
+  current[19] = 0x0F; // padding nibble on an otherwise unchanged row
+  setGray4Pixel(current, width, 38, 2, 0x0F);
+  setGray4Pixel(current, width, 1, 18, 0x0F);
+
+  const Gray4FrameDiff diff = compareGray4Frames(previous, sizeof(previous), current,
+                                                 sizeof(current), width, 20);
+
+  TEST_ASSERT_EQUAL_UINT32(2, diff.changedPixels);
+  TEST_ASSERT_EQUAL_INT32(1, diff.left);
+  TEST_ASSERT_EQUAL_INT32(38, diff.right);
+  TEST_ASSERT_EQUAL_INT32(2, diff.top);
+  TEST_ASSERT_EQUAL_INT32(18, diff.bottom);
+  TEST_ASSERT_EQUAL_UINT8(2, diff.regionCount);
+  TEST_ASSERT_FALSE(diff.regionOverflow);
+}
+
+void test_dense_region_interiors_preserve_all_four_regions(void) {
+  const uint16_t width = 160;
+  uint8_t previous[2400] = {};
+  uint8_t current[2400] = {};
+  for (uint16_t region = 0; region < 4; region++) {
+    for (uint16_t y = 5; y < 20; y++) {
+      for (uint16_t x = region * 40; x < region * 40 + 20; x++) {
+        setGray4Pixel(current, width, x, y, 0x0F);
+      }
+    }
+  }
+
+  const Gray4FrameDiff diff = compareGray4Frames(previous, sizeof(previous), current,
+                                                 sizeof(current), width, 30);
+
+  TEST_ASSERT_EQUAL_UINT32(1200, diff.changedPixels);
+  TEST_ASSERT_EQUAL_UINT8(4, diff.regionCount);
+  TEST_ASSERT_FALSE(diff.regionOverflow);
+  for (uint8_t i = 0; i < diff.regionCount; i++) {
+    TEST_ASSERT_EQUAL_INT32(i * 40, diff.regions[i].left);
+    TEST_ASSERT_EQUAL_INT32(i * 40 + 19, diff.regions[i].right);
+    TEST_ASSERT_EQUAL_INT32(5, diff.regions[i].top);
+    TEST_ASSERT_EQUAL_INT32(19, diff.regions[i].bottom);
+  }
+}
+
 void test_plans_aligned_regional_refresh_rectangle(void) {
   const Gray4FrameDiff diff = singleRegionDiff(12, 10, 5, 20, 9);
   const Gray4RefreshPlan plan = planGray4Refresh(diff, 100, 100, 80);
@@ -222,6 +268,8 @@ void process(void) {
   RUN_TEST(test_counts_nibbles_as_individual_pixels);
   RUN_TEST(test_reports_bounding_rectangle_across_rows);
   RUN_TEST(test_ignores_padding_nibble_for_odd_width);
+  RUN_TEST(test_skips_equal_rows_without_losing_sparse_changes_or_counting_padding);
+  RUN_TEST(test_dense_region_interiors_preserve_all_four_regions);
   RUN_TEST(test_plans_aligned_regional_refresh_rectangle);
   RUN_TEST(test_plans_tight_rectangle_for_observed_clock_change);
   RUN_TEST(test_skips_unchanged_frames);

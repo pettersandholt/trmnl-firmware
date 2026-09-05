@@ -50,24 +50,26 @@ void log_impl(LogLevel level, LogMode mode, const char *file, int line, const ch
 // so shortcut it here
   if (mode == LOG_SERIAL_ONLY) {
     Serial.println(serial_buffer);
+    free(serial_buffer);
+    free(user_message);
     return;
   }
 
   switch (level) {
   case LOG_VERBOSE:
-    Log.verboseln(serial_buffer);
+    Log.verboseln("%s", serial_buffer);
     break;
   case LOG_INFO:
-    Log.infoln(serial_buffer);
+    Log.infoln("%s", serial_buffer);
     break;
   case LOG_WARN:
-    Log.warningln(serial_buffer);
+    Log.warningln("%s", serial_buffer);
     break;
   case LOG_ERROR:
-    Log.errorln(serial_buffer);
+    Log.errorln("%s", serial_buffer);
     break;
   case LOG_FATAL:
-    Log.fatalln(serial_buffer);
+    Log.fatalln("%s", serial_buffer);
     break;
   }
   free(serial_buffer);

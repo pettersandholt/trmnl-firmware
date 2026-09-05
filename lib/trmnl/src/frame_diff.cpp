@@ -1,4 +1,5 @@
 #include <frame_diff.h>
+#include <string.h>
 
 static Gray4FrameDiff emptyDiff(bool valid) {
   Gray4FrameDiff diff = {};
@@ -48,6 +49,10 @@ static void recordRegionPixel(Gray4FrameDiff &diff, int32_t x, int32_t y) {
   const Gray4Region pixel = {x, y, x, y};
   for (uint8_t i = 0; i < diff.regionCount; i++) {
     if (!regionsNear(diff.regions[i], pixel)) continue;
+    const Gray4Region &region = diff.regions[i];
+    // Interior pixels cannot change bounds or make another region mergeable.
+    if (x >= region.left && x <= region.right &&
+        y >= region.top && y <= region.bottom) return;
     mergeRegion(diff.regions[i], pixel);
     mergeNearbyRegions(diff);
     return;
@@ -93,6 +98,7 @@ Gray4FrameDiff compareGray4Frames(const uint8_t *previous, size_t previousSize,
   Gray4FrameDiff diff = emptyDiff(true);
   for (uint16_t y = 0; y < height; y++) {
     const size_t rowOffset = static_cast<size_t>(y) * rowBytes;
+    if (memcmp(previous + rowOffset, current + rowOffset, rowBytes) == 0) continue;
     for (size_t byteX = 0; byteX < rowBytes; byteX++) {
       const uint8_t before = previous[rowOffset + byteX];
       const uint8_t after = current[rowOffset + byteX];

@@ -1432,7 +1432,6 @@ bool display_decode_gray4(const uint8_t *png_data, int data_size, uint8_t *outpu
 
 static Gray4FrameDiff analyze_gray4_frame_diff(const uint8_t *previous_frame, size_t previous_frame_size)
 {
-    // ponytail: error level is the existing remote-log threshold; return to Log_info after field capture.
     const uint16_t width = display_width();
     const uint16_t height = display_height();
     const size_t frame_size = ((static_cast<size_t>(width) + 1) / 2) * height;
@@ -1443,13 +1442,13 @@ static Gray4FrameDiff analyze_gray4_frame_diff(const uint8_t *previous_frame, si
         return diff;
     }
     if (diff.changedPixels == 0) {
-        Log_error("TRMNL X frame diff: unchanged");
+        Log_info("TRMNL X frame diff: unchanged");
         return diff;
     }
 
     const uint32_t bounding_pixels = static_cast<uint32_t>(diff.right - diff.left + 1) *
                                      static_cast<uint32_t>(diff.bottom - diff.top + 1);
-    Log_error("TRMNL X frame diff: changed=%" PRIu32 ", bbox=%" PRId32 ",%" PRId32 "-%" PRId32 ",%" PRId32
+    Log_info("TRMNL X frame diff: changed=%" PRIu32 ", bbox=%" PRId32 ",%" PRId32 "-%" PRId32 ",%" PRId32
              ", bbox_pixels=%" PRIu32 "/%" PRIu32 ", regions=%u%s",
              diff.changedPixels, diff.left, diff.top, diff.right, diff.bottom,
              bounding_pixels, static_cast<uint32_t>(width) * height,
@@ -1958,7 +1957,7 @@ void display_show_image(uint8_t *image_buffer, int data_size, bool bWait, bool b
             Log_info("TRMNL X 4-bit refresh skipped: frame unchanged");
         } else if (refresh_plan.kind == GRAY4_REFRESH_REGIONAL && !force_full) {
             BB_RECT rects[GRAY4_MAX_REFRESH_REGIONS];
-            Log_error("TRMNL X regional 4-bit refresh: regions=%u, changed=%" PRIu32
+            Log_info("TRMNL X regional 4-bit refresh: regions=%u, changed=%" PRIu32
                       ", count=%d/%d",
                       static_cast<unsigned>(refresh_plan.regionCount), gray4_diff.changedPixels,
                       iUpdateCount + 1, FASTEPD_REGIONAL_REFRESH_LIMIT);
@@ -1967,7 +1966,7 @@ void display_show_image(uint8_t *image_buffer, int data_size, bool bWait, bool b
                 rects[i] = {region.left, region.top,
                             region.right - region.left + 1,
                             region.bottom - region.top + 1};
-                Log_error("TRMNL X regional 4-bit refresh: region[%u]=%" PRId32 ",%" PRId32
+                Log_info("TRMNL X regional 4-bit refresh: region[%u]=%" PRId32 ",%" PRId32
                           "-%" PRId32 ",%" PRId32,
                           static_cast<unsigned>(i), region.left, region.top,
                           region.right, region.bottom);

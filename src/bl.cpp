@@ -102,6 +102,10 @@ void iqs323_task_i2c_unlock(void) {}
 
 void wait_for_serial() {
 #ifdef WAIT_FOR_SERIAL
+#ifdef BOARD_TRMNL_X
+  // Scheduled refreshes should not wait for a debug console to attach.
+  if (esp_sleep_get_wakeup_cause() == ESP_SLEEP_WAKEUP_TIMER) return;
+#endif
   int idx = 0;
   unsigned long start = millis();
   while (millis() - start < 2000) {
@@ -1492,7 +1496,7 @@ static uint8_t *load_prev_gray4_frame(size_t *frame_size)
 {
   *frame_size = 0;
   if (!DisplayedImage::exists()) {
-    Log_error("TRMNL X frame diff: no retained previous image (wake reason %d)", (int)wakeup_reason);
+    Log_info("TRMNL X frame diff: no retained previous image (wake reason %d)", (int)wakeup_reason);
     return nullptr;
   }
 
