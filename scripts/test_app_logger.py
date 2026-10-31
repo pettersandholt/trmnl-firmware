@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Run the real application logger against minimal host stubs, without ESP32 hardware."""
+"""Run the real logger's formatting/routing code with host stubs, without ESP32 hardware."""
 
 import os
 from pathlib import Path
@@ -61,7 +61,7 @@ HARNESS = r'''
 #include "support.h"
 #define malloc tracked_malloc
 #define free tracked_free
-#include "app_logger.cpp"
+#include "logger_under_test.cpp"
 #undef malloc
 #undef free
 
@@ -94,9 +94,11 @@ int main(int argc, char **argv) {
 def main():
     with tempfile.TemporaryDirectory(prefix="trmnl-logger-test-") as directory:
         temp = Path(directory)
-        (temp / "misc").mkdir()
-        for header in ("ArduinoLog.h", "bl.h", "globals.h", "stored_logs.h", "string_utils.h", "misc/clock.h"):
-            (temp / header).write_text('#include "support.h"\n')
+        # Upstream moved network/storage helpers into this file. Keep the same
+        # test boundary: the real formatter/router, with logWithAction stubbed.
+        source = (ROOT / "src/app_logger.cpp").read_text()
+        start = source.index("static LogLevel store_submit_threshold")
+        (temp / "logger_under_test.cpp").write_text(source[start:])
         (temp / "support.h").write_text(SUPPORT)
         (temp / "test.cpp").write_text(HARNESS)
         binary = temp / "test"

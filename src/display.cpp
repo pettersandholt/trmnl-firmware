@@ -4,12 +4,14 @@
 #include <PNGdec.h>
 #include <JPEGDEC.h>
 #include <Preferences.h>
+#include <WiFi.h>
 #include <preferences_persistence.h>
 #include <refresh_interval.h>
 #include <frame_diff.h>
 #include "battery_small.h"
 #include "battery_hollow.h"
 #include "messages.h"
+#include "displayed_image.h"
 #include "config.h"
 #include "battery.h"
 #define MAX_BIT_DEPTH 8
@@ -47,32 +49,30 @@ const TRMNL_DEVICE device_list[] =
 #else // BB_EPAPER boards
 const TRMNL_DEVICE device_list[] = 
 {
-// name            sck   mosi   cs   rst   dc   busy  sda   scl   intr   batt  batt_en, batt_type, panel
-  "og",            7,    8,     6,   10,   5,   4,    21,   20,   2,     3,    0xff,    BATT_ADC,  EPD_75,
-  "og_4clr",       7,    8,     6,   10,   5,   4,    21,   20,   2,     3,    0xff,    BATT_ADC,  EPD_75_4CLR,
-  "og_gen2",       6,    1,     4,   2,    5,   0,    23,   10,   3,     0xff, 0xff,    BATT_BQ27427,  EPD_75, // fake battery == 0xff
-  "og_gen2_4clr",  6,    1,     4,   2,    5,   0,    11,   12,   3,     0xff, 0xff,    BATT_BQ27427,  EPD_75_4CLR, // fake battery == 0xff
-  "xteink_x4",     8,    10,    21,  5,    4,   6,    0xff, 0xff, 3,     0xff, 0xff,    BATT_ADC,  EPD_426,
-  "xteink_x3",     8,    10,    21,  5,    4,   6,    20,   0,    3,     0xff, 0xff,    BATT_BQ27220,  EPD_368,
-  "waveshare",     13,   14,    15,  26,   27,  25,   0xff, 0xff, 33,    0xff, 0xff,    BATT_ADC,  EPD_75,
-  "waveshare_397", 11,   12,    10,  46,   9,   3,    41,   42,   0,     0xff, 0xff,    BATT_AXP2101,  EPD_397,
-  "seeed_sticky",  13,   14,    15,  17,   16,  18,   1,    0,    4,     0xff, 0xff,    BATT_BQ27220,  EPD_397,  
-  "seeed_esp32c3", 8,    10,    3,   2,    5,   4,    0xff, 0xff, 9,     0xff, 0xff,    BATT_ADC,  EPD_75,
-  "seeed_esp32s3", 7,    9,     2,   1,    4,   3,    0xff, 0xff, 0,     0xff, 0xff,    BATT_ADC,  EPD_75,
-  "xiao_epaper_mini", 7, 9,     44,  38,   10,  4,    0xff, 0xff, 2,     1,    6,       BATT_ADC,  EPD_426,
-  "xiao_epaper_display", 7, 9,  44,  38,   10,  4,    0xff, 0xff, 5,     1,    6,       BATT_ADC,  EPD_75,
-  "xiao_epaper_3clr", 7, 9,     44,  38,   10,  4,    0xff, 0xff, 5,     1,    6,       BATT_ADC,  EPD_75_3CLR,
-  "xiao_epaper_6clr", 7, 9,     44,  38,   10,  4,    0xff, 0xff, 5,     1,    6,       BATT_ADC,  EPD_75_6CLR,
-  "reterminal_e1001", 7, 9,     10,  12,   11,  13,   0xff, 0xff, 3,     1,    21,      BATT_ADC,  EPD_75,
-  "reterminal_e1002", 7, 9,     10,  12,   11,  13,   0xff, 0xff, 3,     1,    21,      BATT_ADC,  EPD_75_6CLR,
-  "crowpanel42",   0,    0,     0,   0,    0,   0,    0xff, 0xff, 2,     0xff, 0xff,    BATT_NONE, EPD_CROWPANEL, 
-#ifdef CMD_CS1_CS2
-  "m5_paper_mono", 0,    0,     0,   0,    0,   0,    47,   48,   2,     0xff, 0xff,    BATT_NONE, EPD_PAPER_MONO, 
-  "m5_paper_color", 0,   0,     0,   0,    0,   0,    3,    2,    1,     0xff, 0xff,    BATT_NONE, EPD_PAPER_COLOR, 
-  "reterminal_e1004", 0, 0,     0,   0,    0,   0,    0xff, 0xff, 4,     1,    21,      BATT_ADC,  EPD_133_COLOR,
-  "trmnl_steam",   7,    8,     6,   10,   5,   4,    21,   20,   2,     3,    0xff,    BATT_ADC,  EPD_583,
-#endif
-  NULL,            0,    0,     0,   0,    0,   0,    0,    0,    0,     0,    0,       0,         0,
+// name            sck   mosi   cs   rst   dc   busy  sda   scl   intr   batt  batt_en, epd_en  batt_type, panel
+  "og",            7,    8,     6,   10,   5,   4,    21,   20,   2,     3,    0xff,    0xff,   BATT_ADC,  EPD_75,
+  "og_4clr",       7,    8,     6,   10,   5,   4,    21,   20,   2,     3,    0xff,    0xff,   BATT_ADC,  EPD_75_4CLR,
+  "og_gen2",       6,    1,     4,   2,    5,   0,    23,   10,   3,     0xff, 0xff,    0xff,   BATT_BQ27427,  EPD_75, // fake battery == 0xff
+  "og_gen2_4clr",  6,    1,     4,   2,    5,   0,    23,   10,   3,     0xff, 0xff,    0xff,   BATT_BQ27427,  EPD_75_4CLR, // fake battery == 0xff
+  "xteink_x4",     8,    10,    21,  5,    4,   6,    0xff, 0xff, 3,     0,    0xff,    0xff,   BATT_ADC,  EPD_426,
+  "xteink_x3",     8,    10,    21,  5,    4,   6,    20,   0,    3,     0xff, 0xff,    0xff,   BATT_BQ27220,  EPD_368,
+  "waveshare",     13,   14,    15,  26,   27,  25,   0xff, 0xff, 33,    0xff, 0xff,    0xff,   BATT_ADC,  EPD_75,
+  "waveshare_397", 11,   12,    10,  46,   9,   3,    41,   42,   0,     0xff, 0xff,    0xff,   BATT_AXP2101,  EPD_397,
+  "seeed_sticky",  13,   14,    15,  17,   16,  18,   1,    0,    4,     0xff, 0xff,    0xff,   BATT_BQ27220,  EPD_397,  
+  "seeed_esp32c3", 8,    10,    3,   2,    5,   4,    0xff, 0xff, 9,     0xff, 0xff,    0xff,   BATT_ADC,  EPD_75,
+  "seeed_esp32s3", 7,    9,     2,   1,    4,   3,    0xff, 0xff, 0,     0xff, 0xff,    0xff,   BATT_ADC,  EPD_75,
+  "xiao_epaper_mini", 7, 9,     44,  38,   10,  4,    0xff, 0xff, 2,     1,    6,       0xff,   BATT_ADC,  EPD_426,
+  "xiao_epaper_display", 7, 9,  44,  38,   10,  4,    0xff, 0xff, 5,     1,    6,       0xff,   BATT_ADC,  EPD_75,
+  "xiao_epaper_3clr", 7, 9,     44,  38,   10,  4,    0xff, 0xff, 5,     1,    6,       0xff,   BATT_ADC,  EPD_75_3CLR,
+  "xiao_epaper_6clr", 7, 9,     44,  38,   10,  4,    0xff, 0xff, 5,     1,    6,       0xff,   BATT_ADC,  EPD_75_6CLR,
+  "reterminal_e1001", 7, 9,     10,  12,   11,  13,   0xff, 0xff, 3,     1,    21,      0xff,   BATT_ADC,  EPD_75,
+  "reterminal_e1002", 7, 9,     10,  12,   11,  13,   0xff, 0xff, 3,     1,    21,      12,     BATT_ADC,  EPD_75_6CLR,
+  "crowpanel42",   0,    0,     0,   0,    0,   0,    0xff, 0xff, 2,     0xff, 0xff,    0xff,   BATT_NONE, EPD_CROWPANEL, 
+  "m5_paper_mono", 0,    0,     0,   0,    0,   0,    47,   48,   2,     0xff, 0xff,    0xff,   BATT_NONE, EPD_PAPER_MONO, 
+  "m5_paper_color", 0,   0,     0,   0,    0,   0,    3,    2,    1,     0xff, 0xff,    0xff,   BATT_NONE, EPD_PAPER_COLOR, 
+  "reterminal_e1004", 0, 0,     0,   0,    0,   0,    0xff, 0xff, 4,     1,    21,      12,     BATT_ADC,  EPD_133_COLOR,
+  "trmnl_steam",   7,    8,     6,   10,   5,   4,    21,   20,   2,     3,    0xff,    0xff,   BATT_ADC,  EPD_583,
+  NULL,            0,    0,     0,   0,    0,   0,    0,    0,    0,     0,    0,       0,      0,         0,
 }; // device_list
 
 // TRMNL SPI ePaper panel types list. The list order is fixed and based on enumerated values
@@ -85,13 +85,11 @@ const DISPLAY_PROFILE dpList[12][3] = { // 1-bit and 2-bit display types for eac
     {{EP75YR_800x480, EP75YR_800x480}, {EP75YR_800x480, EP75YR_800x480}, {EP75YR_800x480, EP75YR_800x480}}, 
     {{EP73_SPECTRA_800x480, EP73_SPECTRA_800x480}, {EP73_SPECTRA_800x480, EP73_SPECTRA_800x480}, {EP73_SPECTRA_800x480, EP73_SPECTRA_800x480}},
     {{EPD_CROWPANEL42, EPD_CROWPANEL42_4GRAY},{EPD_CROWPANEL42, EPD_CROWPANEL42_4GRAY},{EPD_CROWPANEL42, EPD_CROWPANEL42_4GRAY}},
-#ifdef CMD_CS1_CS2
     {{EP583_648x480, EP583_648x480_4GRAY}, {EP583_648x480, EP583_648x480_4GRAY}, {EP583_648x480, EP583_648x480_4GRAY}},
     {{EPD_M5_PAPER_MONO, EPD_M5_PAPER_MONO_4GRAY},{EPD_M5_PAPER_MONO, EPD_M5_PAPER_MONO_4GRAY},{EPD_M5_PAPER_MONO, EPD_M5_PAPER_MONO_4GRAY}},
     {{EPD_M5_PAPER_COLOR, EPD_M5_PAPER_COLOR},{EPD_M5_PAPER_COLOR, EPD_M5_PAPER_COLOR},{EPD_M5_PAPER_COLOR, EPD_M5_PAPER_COLOR}},
     {{EPD_SEEED_E1004, EPD_SEEED_E1004},{EPD_SEEED_E1004, EPD_SEEED_E1004},{EPD_SEEED_E1004, EPD_SEEED_E1004}},
     {{EP368_792x528, EP368_792x528_4GRAY}, {EP368_792x528, EP368_792x528_4GRAY}, {EP368_792x528, EP368_792x528_4GRAY}},
-#endif
 };
 uint8_t u8SpectraPal[512]; // RGB333 mapped to closest Spectra6 color
 #endif // !PARALLEL_EPD
@@ -137,15 +135,32 @@ extern BQ27427 lipo; // Use lipo.[] to interact with the library in an Arduino
 #include <trmnl_log.h>
 #include "png_flip.h"
 #include "bmp.h"
-#include "fonts/nicoclean_8.h"
-#include "fonts/Inter_18.h"
-#include "fonts/Roboto_Black_24.h"
+#include "fonts.h"
 #include <globals.h>
 static uint8_t *pDither;
 
 #ifdef BB_EPAPER
+static uint8_t bLightSleepWanted = 0;
+
+static void display_apply_light_sleep(uint8_t enabled)
+{
+#ifdef CMD_CS1_CS2
+    bbep.setLightSleep(enabled, pDevice->epd_en_pin);
+#else
+    bbep.setLightSleep(enabled);
+#endif
+}
+
 static bool display_update_epaper(int refreshMode, bool wait, bool writePlane = false, uint8_t plane = PLANE_0)
 {
+#if defined(BOARD_SEEED_RETERMINAL_E1002) || defined(BOARD_SEEED_RETERMINAL_E1004)
+    // Light sleep with the WiFi radio running is unsupported
+    if (bLightSleepWanted && WiFi.getMode() != WIFI_MODE_NULL) {
+        display_apply_light_sleep(false);
+    } else {
+        display_apply_light_sleep(bLightSleepWanted);
+    }
+#endif
     if (writePlane) {
         bbep.writePlane(plane);
     }
@@ -159,6 +174,30 @@ static bool display_update_epaper(int refreshMode, bool wait, bool writePlane = 
     // The next update can be a partial update because the current is 1-bpp and stays in the EPD RAM
     bCanDoPartial = (bbep.getPanelType() == dpList[pDevice->panel_set][iTempProfile].OneBit);
     return true;
+}
+
+static void display_select_one_bit_panel(bool only_if_changed = false)
+{
+    bool custom_pins = pDevice->epd_mosi_pin != 0 || pDevice->epd_sck_pin != 0;
+    int one_bit = dpList[pDevice->panel_set][custom_pins ? iTempProfile : 0].OneBit;
+    if (only_if_changed && bbep.getPanelType() == one_bit) {
+        return;
+    }
+    if (custom_pins) {
+        bbep.setPanelType(one_bit);
+        bbep.initIO(pDevice->epd_dc_pin, pDevice->epd_rst_pin, pDevice->epd_busy_pin, pDevice->epd_cs_pin,
+            pDevice->epd_mosi_pin, pDevice->epd_sck_pin, 8000000);
+    } else {
+        bbep.begin(one_bit);
+    }
+}
+
+// Message screens are 1-bit
+static void display_prepare_message(void)
+{
+    display_select_one_bit_panel(true);
+    bbep.setMemoryMode(BB_MODE_1BPP); // use 1-bit mode to save memory
+    bbep.allocBuffer(false);
 }
 
 static void WriteSPIByte(uint8_t data)
@@ -487,6 +526,9 @@ void enter_shipment_sleep()
     // Check initial GPIO38 state
     int gpio38_state = digitalRead(TCA9535_INT);
 
+    // display_sleep() leaves its light-sleep timer armed, which would wake us every second.
+    esp_sleep_disable_wakeup_source(ESP_SLEEP_WAKEUP_TIMER);
+
     // Enable GPIO wakeup for light sleep
     esp_err_t err = esp_sleep_enable_gpio_wakeup();
     if (err != ESP_OK) {
@@ -613,13 +655,17 @@ void modem_reset_target(void) {
 void display_set_light_sleep(uint8_t enabled)
 {
 #ifdef BB_EPAPER
-    bbep.setLightSleep(enabled);
+    bLightSleepWanted = enabled;
+    display_apply_light_sleep(enabled);
 #endif
 }
 
 // Clear any ghosting on the X display by wiping it black/white many times
 void display_wipe(void)
 {
+#ifdef BOARD_TRMNL_X
+    DisplayedImage::cover(); // The cached dashboard no longer describes the panel.
+#endif
 #ifdef BB_EPAPER
 
 #ifdef BOARD_TRMNL_4CLR
@@ -675,9 +721,7 @@ void display_reset(void)
     Log_info("e-Paper Clear start");
     bbep.fillScreen(BBEP_WHITE);
 #ifdef BB_EPAPER
-#ifndef BOARD_SEEED_RETERMINAL_E1002
-    bbep.setLightSleep(true);
-#endif
+    display_set_light_sleep(true);
     if (!display_update_epaper(apiDisplayResult.response.maximum_compatibility ? REFRESH_FULL : REFRESH_FAST, true)) {
         Log_error("display_reset: e-paper update failed");
     }
@@ -706,49 +750,47 @@ uint16_t display_width()
     return bbep.width();
 }
 
-#ifdef PARALLEL_EPD
-void display_draw_touchbar_indicator(touchbar_side_t side, bool filled)
+void display_fill_pill(int x, int y, int w, int h, uint8_t color)
 {
-    const int radius = 24;
-    const int margin_bottom = 20;
-    int w = bbep.width();
-    int h = bbep.height();
-    int x;
-    Log_info("Drawing touchbar indicator %d\n", (int)side);
-    switch (side) {
-        case TOUCHBAR_LEFT:   x = w / 6;     break;
-        case TOUCHBAR_MIDDLE: x = w / 2;     break;
-        case TOUCHBAR_RIGHT:  x = w * 5 / 6; break;
-        default: return;
-    }
-    int y = h - margin_bottom - radius;
-    int prev_mode = bbep.getPreviousMode();
-        const int rect_h = radius * 2;
-        const int rect_w = rect_h * 4;
-        const int border = 3;
-        int rx = x - rect_w / 2;
-        int ry = y - rect_h / 2;
-        uint8_t fill_color   = filled ? BBEP_BLACK : BBEP_WHITE;
-        uint8_t border_color = filled ? BBEP_WHITE : BBEP_BLACK;
-        if (prev_mode == BB_MODE_NONE) {
-            bbep.setMode(BB_MODE_1BPP);
-            // No previous image, so in order to get what we need in a partial update, we need to
-            // set the colors to the opposite of what we want drawn.
-            bbep.fillScreen(BBEP_WHITE);
-            bbep.drawRect(rx - border - 1, ry - border - 1, rect_w + 2 + (2*border), rect_h + 2 + (2*border), border_color);
-            bbep.fillRect(rx - border, ry - border, rect_w + (2*border), rect_h + (2*border), fill_color);
-            bbep.fillRect(rx, ry, rect_w, rect_h, border_color);
-            int sz = bbep.width() * bbep.height() / 8; // 1-bit per pixel
-            memcpy(bbep.previousBuffer(), bbep.currentBuffer(), sz);
-            bbep.setPreviousMode(BB_MODE_1BPP);
+    float r = h / 2.0f;
+    for (int row = 0; row < h; row++) {
+        float dy = row + 0.5f - r;
+        int inset = (int)lroundf(r - sqrtf(r * r - dy * dy));
+        if (w - 2 * inset > 0) {
+            bbep.fillRect(x + inset, y + row, w - 2 * inset, 1, color);
         }
-        // Draw outline, then larger filled rect for border color and inner for fill color
-        bbep.drawRect(rx - border - 1, ry - border - 1, rect_w + 2 + (2*border), rect_h + 2 + (2*border), fill_color);
-        bbep.fillRect(rx - border, ry - border, rect_w + (2*border), rect_h + (2*border), border_color);
-        bbep.fillRect(rx, ry, rect_w, rect_h, fill_color);
-        bbep.partialUpdate(false);
-} /* display_draw_touchbar_indicator() */
-#endif
+    }
+}
+
+void display_draw_battery_icon(int x, int y)
+{
+#ifdef BOARD_TRMNL_X
+    // The charging icon while on USB power (whether actually charging or not)
+    if (power().usbStatus() == UsbStatus::CONNECTED) {
+        Log_info("Displaying 'battery is charging' icon");
+        bbep.loadG5Image(battery_small, x, y, BBEP_WHITE, BBEP_BLACK);
+        return;
+    }
+    bbep.loadG5Image(battery_hollow, x, y, BBEP_WHITE, BBEP_BLACK);
+    Log_info("Displaying 'battery charge level' icon");
+    int batt_percent = battery().readSoc(); // -1 if no battery or the gauge reading failed
+    if (batt_percent >= 0) {
+        if (batt_percent >= 97) batt_percent = 100; // can sometimes report 98% when full
+        // Draw a black rectangle to represent the battery charge level
+        bbep.fillRect(x + 10, y + 18, (97 * batt_percent) / 100, 39, BBEP_BLACK);
+    } else { // a cross over the empty battery: each diagonal a band 6 px tall, column by column
+        const int left = x + 10, top = y + 18, w = 97, h = 39, half = 3;
+        for (int i = 0; i < w; i++) {
+            int down = top + i * h / w;     // top left to bottom right
+            int up = top + h - i * h / w;   // bottom left to top right
+            for (int c : {down, up}) {
+                int y0 = max(c - half, top), y1 = min(c + half, top + h);
+                bbep.fillRect(left + i, y0, 1, y1 - y0, BBEP_BLACK);
+            }
+        }
+    }
+#endif // BOARD_TRMNL_X
+}
 
 /**
  * @brief Function to draw multi-line text onto the display
@@ -781,7 +823,10 @@ int iWidthLimit = (max_width * 3)/4; // don't let the text go all the way to the
         bbep.getStringBox(szTemp, &rect);
         if (c == 0 || c == '\n' || (c == ' ' && rect.w >= iWidthLimit) || d == &szTemp[sizeof(szTemp) - 1]) {
             if (c == 0 || s[0] == 0) bDone = true;
-            if (c == ' ' || c == '\n') d[-1] = 0; // don't print the space/newline
+            if (c == ' ' || c == '\n') {
+                d[-1] = 0; // don't print the space/newline
+                bbep.getStringBox(szTemp, &rect); // and don't center it either
+            }
             // Display the current partial string
             bbep.setCursor(x_start + (max_width - rect.w) / 2, -1);
             bbep.println(szTemp);
@@ -836,7 +881,7 @@ void ReduceBpp(int iDestBpp, int iPixelType, uint8_t *pPalette, uint8_t *pSrc, u
                         pPal = &pPalette[(s[0] & 0xf) * 3];
                         g = (pPal[0] + pPal[1]*2 + pPal[2])/4;
                     } else {
-                        g = (s[0] & 0xf) | (s[0] << 4);
+                        g = (s[0] & 0xf) | ((s[0] & 0xf) << 4); // the low nibble only: g is an int
                     }
                     s++;
                 } else {
@@ -1022,8 +1067,20 @@ uint16_t rgb333;
 int png_draw_6clr(PNGDRAW *pDraw)
 {
     uint8_t r=0, g=0, b=0, *s, *pPal, *pPalette = pDraw->pPalette;
-    int x, y, iDelta, iBpp = pDraw->iBpp;
+    int x, y, iWidth, iDelta, iBpp = pDraw->iBpp;
+    bool bRotated = (pDraw->iWidth == bbep.height() && bbep.width() != bbep.height());
+
     y = pDraw->y;
+    if (bRotated) {
+        iWidth = pDraw->iWidth;
+        if (iWidth > bbep.height()) iWidth = bbep.height(); // crop to width of EPD
+        if (y >= bbep.width()) return 0; // past the bottom of the EPD; stop decoding
+    } else {
+        iWidth = pDraw->iWidth;
+        if (iWidth > bbep.width()) iWidth = bbep.width(); // crop to width of EPD
+        if (y >= bbep.height()) return 0;
+    }
+
     switch (pDraw->iPixelType) {
         case PNG_PIXEL_INDEXED:
             break;
@@ -1045,7 +1102,7 @@ int png_draw_6clr(PNGDRAW *pDraw)
     } // switch on pixel type
     iDelta = iBpp/8;
     s = pDraw->pPixels;
-    for (x=0; x<pDraw->iWidth; x++) { // slower code, but less code :)
+    for (x=0; x<iWidth; x++) { // slower code, but less code :)
         switch (iBpp) {
             case 24:
             case 32:
@@ -1110,7 +1167,11 @@ int png_draw_6clr(PNGDRAW *pDraw)
                     if ((x & 7) == 7) s++;
                     break;
             } // switch on bpp
-            bbep.drawPixel(x, y, GetSpectraPixel(r, g, b));
+            if (bRotated) {
+                bbep.drawPixel(bbep.width()-1-y, x, GetSpectraPixel(r, g, b));
+            } else {
+                bbep.drawPixel(x, y, GetSpectraPixel(r, g, b));
+            }
         } // for x
     return 1; // continue decoding
 } /* png_draw_6clr() */
@@ -1124,9 +1185,14 @@ int png_draw_4clr(PNGDRAW *pDraw)
 {
     uint8_t r=0, g=0, b=0, *s, *pPal, *pPalette = pDraw->pPalette;
     int x, iDelta, iBpp = pDraw->iBpp;
+    int iWidth;
     uint8_t uc=0, *d, *pTemp = bbep.getCache(); // get some scratch memory (not from the stack)
 
     d = pTemp;
+    iWidth = pDraw->iWidth;
+    if (iWidth > bbep.width()) iWidth = bbep.width(); // Crop to EPD width if larger
+    if (pDraw->y >= bbep.height()) return 0; // Past the bottom of the EPD; stop decoding
+
     switch (pDraw->iPixelType) {
         case PNG_PIXEL_INDEXED:
             break;
@@ -1148,7 +1214,7 @@ int png_draw_4clr(PNGDRAW *pDraw)
     } // switch on pixel type
     iDelta = iBpp/8;
     s = pDraw->pPixels;
-    for (x=0; x<pDraw->iWidth; x++) { // slower code, but less code :)
+    for (x=0; x<iWidth; x++) { // slower code, but less code :)
         switch (iBpp) {
             case 24:
             case 32:
@@ -1219,7 +1285,14 @@ int png_draw_4clr(PNGDRAW *pDraw)
                 *d++ = uc;
             }
         } // for x
-    bbep.writeData(pTemp, (pDraw->iWidth+3)/4);
+    bbep.writeData(pTemp, (iWidth+3)/4);
+    if (iWidth < bbep.width()) {
+        // fill the unused area of the display with white
+        x = ((bbep.width()+3)/4) - ((iWidth+3)/4); // number of missing bytes
+        d = bbep.getCache();
+        memset(d, 0x55, x); // 0x55 = 4 pixels of white (01)
+        bbep.writeData(d, x);
+    }
     return 1; // continue decoding
 } /* png_draw4clr() */
 #endif // BOARD_TRMNL_4CLR (4 color only)
@@ -1697,6 +1770,7 @@ PNG *png = new PNG();
                     Log_error("%s [%d]: bbep.AllocBuffer failed!\n\r", __FILE__, __LINE__);
                     return -1;
                 }
+                bbep.fillScreen(BBEP_WHITE); // in case the image is too small - undrawn areas will be white
                 Log_info("%s [%d]: decoding for 6-color EPD\r\n", __FILE__, __LINE__);
                 png->openRAM((uint8_t *)pPNG, iDataSize, png_draw_6clr);
                 png->decode(NULL, 0);
@@ -1711,6 +1785,15 @@ PNG *png = new PNG();
             bbep.startWrite(PLANE_1); // start writing image data
             png->decode(NULL, 0);
             png->close();
+            if (png->getHeight() < bbep.height()) {
+                // fill in missing lines with white
+                uint8_t *d = bbep.getCache();
+                int y, iLen = (bbep.width()+3)/4;
+                memset(d, 0x55, iLen); // 4 pixels of white (01) per byte
+                for (y=png->getHeight(); y<bbep.height(); y++) {
+                    bbep.writeData(d, iLen);
+                }
+            }
             delete(png); // free the decoder instance
             return REFRESH_FULL;
 #endif // BOARD_TRMNL_4CLR
@@ -1833,13 +1916,7 @@ void display_show_image(uint8_t *image_buffer, int data_size, bool bWait, bool b
     }
 #endif
 #ifdef BB_EPAPER
-    if (pDevice->epd_mosi_pin != 0 || pDevice->epd_sck_pin != 0) {
-        bbep.setPanelType(dpList[pDevice->panel_set][iTempProfile].OneBit);
-        bbep.initIO(pDevice->epd_dc_pin, pDevice->epd_rst_pin, pDevice->epd_busy_pin, pDevice->epd_cs_pin,
-            pDevice->epd_mosi_pin, pDevice->epd_sck_pin, 8000000);
-    } else {
-        bbep.begin(dpList[pDevice->panel_set][0].OneBit);
-    }
+    display_select_one_bit_panel();
 #endif // BB_EPAPER
     if (isPNG == true && data_size < MAX_IMAGE_SIZE)
     {
@@ -1857,6 +1934,7 @@ void display_show_image(uint8_t *image_buffer, int data_size, bool bWait, bool b
             // G5 compressed image
             BB_BITMAP *pBBB = (BB_BITMAP *)image_buffer;
 #ifdef BB_EPAPER
+            bbep.setMemoryMode(BB_MODE_1BPP); // use 1-bit mode to save memory
             if (bbep.allocBuffer(false) != BBEP_SUCCESS) {
                 Log_info("Error allocating bb_epaper frame buffer");
                 return;
@@ -1874,39 +1952,24 @@ void display_show_image(uint8_t *image_buffer, int data_size, bool bWait, bool b
             }
             bbep.loadG5Image(image_buffer, x, y, BBEP_WHITE, BBEP_BLACK);
 #ifdef BOARD_TRMNL_X
-            // Show charging indicator if the USB power is connected (whether actually charging or not)
-            if (power().usbStatus() == UsbStatus::CONNECTED) {
-                Log_info("Displaying 'battery is charging' icon");
-                bbep.loadG5Image(battery_small, 40, bbep.height() - 120, BBEP_WHITE, BBEP_BLACK);
-            } else { // show battery level
-                y = bbep.height() - 120;
-                bbep.loadG5Image(battery_hollow, 40, y, BBEP_WHITE, BBEP_BLACK);
-                Log_info("Displaying 'battery charge level' icon");
-                int batt_percent = battery().readSoc(); // -1 if no battery or the gauge reading failed
-                if (batt_percent >= 0) {
-                    if (batt_percent >= 97) batt_percent = 100; // can sometimes report 98% when full
-                    // Draw a black rectangle to represent the battery charge level
-                    bbep.fillRect(40+10, y+18, (97 * batt_percent)/100, 39, BBEP_BLACK);
-                } else {
-                    bbep.drawLine(40+10, y+18, 10+97, y+18+39, BBEP_BLACK);
-                    bbep.drawLine(40+10+97, y+18, 10, y+18+39, BBEP_BLACK);
-                }
-            }
+            display_draw_battery_icon(bbep.width() - DISPLAY_BATTERY_ICON_W - DISPLAY_BATTERY_ICON_MARGIN,
+                                      DISPLAY_BATTERY_ICON_MARGIN);
 #endif // BOARD_TRMNL_X
         }
         else
         {
          // This work-around is due to a lack of RAM; the correct method would be to use loadBMP()
-            bmpNormalizePolarity(image_buffer, image_buffer+62, (bbep.width() / 8) * bbep.height()); // palette may be [white, black]
-            flip_image(image_buffer+62, bbep.width(), bbep.height(), false); // fix bottom-up bitmap images
+            const int iBmpWidth = image_buffer[18] | (image_buffer[19] << 8);
+            const int iBmpHeight = image_buffer[22] | (image_buffer[23] << 8);
+            bmpNormalizePolarity(image_buffer, image_buffer+62, (iBmpWidth / 8) * iBmpHeight); // palette may be [white, black]
+            flip_image(image_buffer+62, iBmpWidth, iBmpHeight, false); // fix bottom-up bitmap images
 #ifdef BB_EPAPER
+            bbep.setMemoryMode(BB_MODE_1BPP);
             bbep.setBuffer(image_buffer+62); // uncompressed 1-bpp bitmap
 #endif // BB_EPAPER
         }
 #ifdef BB_EPAPER
-#ifndef BOARD_SEEED_RETERMINAL_E1002
-        bbep.writePlane(); // send image data to the EPD
-#endif // !BOARD_SEEED_RETERMINAL_E1002
+        bbep.writePlane(); // send image data to the EPD (converting it if needed to 4/6-clr)
         iRefreshMode = REFRESH_PARTIAL;
 #endif // BB_EPAPER
 #if !defined(BOARD_TRMNL_X) || defined(BB_EPAPER)
@@ -1940,19 +2003,16 @@ void display_show_image(uint8_t *image_buffer, int data_size, bool bWait, bool b
         iRefreshMode = REFRESH_FAST; // fast update when showing loading screen
     }
     Log_info("%s [%d]: EPD refresh mode: %d\r\n", __FILE__, __LINE__, iRefreshMode);
-#ifndef BOARD_SEEED_RETERMINAL_E1002
 #ifdef DO_NOT_LIGHT_SLEEP
-    bbep.setLightSleep(false);
+    display_set_light_sleep(false);
 #else
-    bbep.setLightSleep(true);
-
+    display_set_light_sleep(true);
 #endif // DO_NOT_LIGHT_SLEEP
-#endif // !BOARD_SEEED_RETERMINAL_E1002
     if (bbep.getPanelType() == EP397_800x480 && iRefreshMode == REFRESH_FAST) {
         // Seeed Sticky: fast refresh on this panel isn't working and full refresh = fast
         iRefreshMode = REFRESH_FULL;
     }
-    if (!display_update_epaper(iRefreshMode, bWait)) {
+    if (!display_update_epaper(iRefreshMode, bWait, bAlloc)) {
         Log_error("display_show_image: e-paper update failed");
         if (bAlloc) {
             bbep.freeBuffer();
@@ -2086,6 +2146,9 @@ uint8_t *buffer;
  */
 void display_show_msg(uint8_t *image_buffer, MSG message_type, const char *message_text)
 {
+#ifdef BOARD_TRMNL_X
+    DisplayedImage::cover();
+#endif
     auto width = display_width();
     auto height = display_height();
     UWORD Imagesize = ((width % 8 == 0) ? (width / 8) : (width / 8 + 1)) * height;
@@ -2094,7 +2157,7 @@ void display_show_msg(uint8_t *image_buffer, MSG message_type, const char *messa
     Log_info("display_show_msg start");
     Log_info("maximum_compatibility = %d\n", apiDisplayResult.response.maximum_compatibility);
 #ifdef BB_EPAPER
-    bbep.allocBuffer(false);
+    display_prepare_message();
 #else
     bbep.setMode(BB_MODE_1BPP); // message screens are 1-bit
 #endif
@@ -2177,7 +2240,7 @@ void display_show_msg(uint8_t *image_buffer, MSG message_type, const char *messa
         bbep.setCursor((bbep.width() - rect.w)/2, 430);
         bbep.println(string1);
 
-        const char string2[] = "Unplug the USB-C to enter shipping mode.";
+        const char string2[] = "Unplug the USB-C to complete shutdown.";
         bbep.getStringBox(string2, &rect);
         bbep.setCursor((bbep.width() - rect.w)/2, 500);
         bbep.print(string2);
@@ -2196,32 +2259,6 @@ void display_show_msg(uint8_t *image_buffer, MSG message_type, const char *messa
         bbep.print(string2);
     break;
     }
-    case WIFI_RESET_CONFIRM:
-    {
-        const char string1[] = "Are you sure you want to reset WiFi settings?";
-        bbep.getStringBox(string1, &rect);
-        bbep.setCursor((bbep.width() - rect.w)/2, 430);
-        bbep.println(string1);
-        const char string2[] = "Hold middle of touch bar to confirm, tap to cancel.";
-        bbep.getStringBox(string2, &rect);
-        bbep.setCursor((bbep.width() - rect.w)/2, -1);
-        bbep.print(string2);
-    break;
-    }
-
-    case POWER_OFF_CONFIRM:
-    {
-        const char string1[] = "Turn off device?";
-        bbep.getStringBox(string1, &rect);
-        bbep.setCursor((bbep.width() - rect.w)/2, 430);
-        bbep.println(string1);
-        const char string2[] = "Hold middle of touch bar to confirm, tap to cancel.";
-        bbep.getStringBox(string2, &rect);
-        bbep.setCursor((bbep.width() - rect.w)/2, -1);
-        bbep.print(string2);
-    break;
-    }
-
     case WIFI_CONNECT:
     {
         const char string1[] = "Connect to TRMNL WiFi";
@@ -2608,12 +2645,15 @@ void display_show_msg(uint8_t *image_buffer, MSG message_type, const char *messa
 
 void display_show_msg_qa(const float *voltage, const float *temperature, bool qa_result)
 {
+#ifdef BOARD_TRMNL_X
+    DisplayedImage::cover();
+#endif
     BB_RECT rect;
 
     Log_info("display_show_msg start");
     Log_info("maximum_compatibility = %d\n", apiDisplayResult.response.maximum_compatibility);
 #ifdef BB_EPAPER
-    bbep.allocBuffer(false);
+    display_prepare_message();
     bbep.fillScreen(BBEP_WHITE); // the results go on a blank screen
 #else
     bbep.setMode(BB_MODE_1BPP);
@@ -2701,10 +2741,13 @@ void display_show_msg_qa(const float *voltage, const float *temperature, bool qa
  */
 void display_show_msg(uint8_t *image_buffer, MSG message_type, String friendly_id, bool id, const char *fw_version, String message)
 {
+#ifdef BOARD_TRMNL_X
+    DisplayedImage::cover();
+#endif
     Log_info("Free heap in display_show_msg - %" PRIu32, ESP.getMaxAllocHeap());
     Log_info("maximum_compatibility = %d\n", apiDisplayResult.response.maximum_compatibility);
 #ifdef BB_EPAPER
-    bbep.allocBuffer(false);
+    display_prepare_message();
     Log_info("Free heap after bbep.allocBuffer() - %" PRIu32, ESP.getMaxAllocHeap());
 #else
     bbep.setMode(BB_MODE_1BPP); // message screens are 1-bit
